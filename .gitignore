@@ -1,6 +1,7 @@
 # Custom
 .idea
 tldextract-cache
+*_req_logs
 cache/
 
 # Byte-compiled / optimized / DLL files

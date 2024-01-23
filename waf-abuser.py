@@ -23,12 +23,14 @@ def create_logger(name: str, logger_level: logging):
     return logger
 
 
+# Read all WAF Ranges from 'PublicWAFs.txt'
 def parse_public_waf_ranges():
     with open("PublicWAFs.txt") as publicWAFs:
         next(publicWAFs)
         return [ip.strip() for ip in publicWAFs]
 
 
+# Check every IP to filter out for WAF appearance
 def filter_ips_from_waf(ips_to_check: list[str]):
     waf_ips_with_cidr = parse_public_waf_ranges()
     clear_ips = []
@@ -39,6 +41,7 @@ def filter_ips_from_waf(ips_to_check: list[str]):
     return clear_ips
 
 
+# Extract TLD from each domain
 def get_top_domains(domains: list[str]):
     domains = list(filter(None, domains))
     custom_tldextract = tldextract.TLDExtract(cache_dir=f'{os.getcwd()}' + '/cache/tldextract-cache')
