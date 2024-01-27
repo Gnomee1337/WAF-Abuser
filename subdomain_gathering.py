@@ -24,57 +24,57 @@ async def dnsdumpster_scraping(domain: str):
         os.mkdir(os.getcwd() + '/cache/dnsdumpster_req_logs')
     async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as session:
         # GET-Request for each domain to receive unique CSRFToken
-        async with session.get('https://dnsdumpster.com') as resp:
-            cookies = session.cookie_jar.filter_cookies('https://dnsdumpster.com')
-            CSRFtoken = str(cookies.get('csrftoken')).split('Set-Cookie: csrftoken=')[1]
+        # async with session.get('https://dnsdumpster.com') as resp:
+        #     cookies = session.cookie_jar.filter_cookies('https://dnsdumpster.com')
+        #     CSRFtoken = str(cookies.get('csrftoken')).split('Set-Cookie: csrftoken=')[1]
         # POST-Request for each domain
-        async with session.post('https://dnsdumpster.com',
-                                data={'csrfmiddlewaretoken': CSRFtoken,
-                                      'targetip': domain,
-                                      'user': 'free'},
-                                headers={'Host': 'dnsdumpster.com',
-                                         'Pragma': 'no-cache',
-                                         'Cache-Control': 'no-cache',
-                                         'Upgrade-Insecure-Requests': '1',
-                                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
-                                         'Origin': 'https://dnsdumpster.com',
-                                         'Content-Type': 'application/x-www-form-urlencoded',
-                                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                                         'Referer': 'https://dnsdumpster.com/',
-                                         'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
-                                         'Cookie': f'csrftoken={CSRFtoken}'}
-                                ) as resp:
-            response_text = await resp.text()
-              # Write HTML-Response to file
-            with open(os.path.join(os.getcwd() + '/cache/dnsdumpster_req_logs',
-                                   f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt'),
-                      'a') as post_request_file:
-                post_request_file.write(response_text)
-            # response_text = ''
-            # with open(os.getcwd() + '/cache/dnsdumpster_req_logs/' + 'stackoverflow.com_23-01-2024_21h15m22s.txt',
-            #           'r') as post_req_from_file:
-            #     response_text = post_req_from_file.read()
-            # print(text)
-            # text = await resp.read()
-            soup = BeautifulSoup(response_text.encode('utf-8'), 'html.parser')
-            rb = soup.find_all('td', {'class': 'col-md-4'})
-            # txt = []
-            # for i in soup.find_all('a',{'class':'external nounderline','data-toggle':'modal'},href=True):
-            #     txt.append(i.href.strip().replace('n',''))
-            #     # if i.nextSibling == u'br':
-            #     #     txt.append(i.nextSibling.text.strip().replace('n',''))
-            # print(txt)
-            # Find all domains in HTML-Response
-            for found_domain in rb:
-                dnsdumpster_output.append(
-                    found_domain.text.replace('\n', '').split('HTTP')[0].replace('. ', '').lstrip('1234567890 ').rstrip(
-                        '.'))
-            # Write only domains to file
-            with open(os.path.join(os.getcwd() + '/cache/dnsdumpster_req_logs',
-                                   f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt'),
-                      'a') as domains_only_file:
-                domains_only_file.write(
-                    "\n".join(str(dnsdumpster_out_domain) for dnsdumpster_out_domain in dnsdumpster_output))
+        # async with session.post('https://dnsdumpster.com',
+        #                         data={'csrfmiddlewaretoken': CSRFtoken,
+        #                               'targetip': domain,
+        #                               'user': 'free'},
+        #                         headers={'Host': 'dnsdumpster.com',
+        #                                  'Pragma': 'no-cache',
+        #                                  'Cache-Control': 'no-cache',
+        #                                  'Upgrade-Insecure-Requests': '1',
+        #                                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
+        #                                  'Origin': 'https://dnsdumpster.com',
+        #                                  'Content-Type': 'application/x-www-form-urlencoded',
+        #                                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        #                                  'Referer': 'https://dnsdumpster.com/',
+        #                                  'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
+        #                                  'Cookie': f'csrftoken={CSRFtoken}'}
+        #                         ) as resp:
+        #     response_text = await resp.text()
+        # Write HTML-Response to file
+        # with open(os.path.join(os.getcwd() + '/cache/dnsdumpster_req_logs',
+        #                        f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt'),
+        #           'a') as post_request_file:
+        #     post_request_file.write(response_text)
+        response_text = ''
+        with open(os.getcwd() + '/cache/dnsdumpster_req_logs/' + 'stackoverflow.com_23-01-2024_21h15m22s.txt',
+                  'r') as post_req_from_file:
+            response_text = post_req_from_file.read()
+        # print(text)
+        # text = await resp.read()
+        soup = BeautifulSoup(response_text.encode('utf-8'), 'html.parser')
+        rb = soup.find_all('td', {'class': 'col-md-4'})
+        # txt = []
+        # for i in soup.find_all('a',{'class':'external nounderline','data-toggle':'modal'},href=True):
+        #     txt.append(i.href.strip().replace('n',''))
+        #     # if i.nextSibling == u'br':
+        #     #     txt.append(i.nextSibling.text.strip().replace('n',''))
+        # print(txt)
+        # Find all domains in HTML-Response
+        for found_domain in rb:
+            dnsdumpster_output.append(
+                found_domain.text.replace('\n', '').split('HTTP')[0].replace('. ', '').lstrip('1234567890 ').rstrip(
+                    '.'))
+        # Write only domains to file
+        with open(os.path.join(os.getcwd() + '/cache/dnsdumpster_req_logs',
+                               f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt'),
+                  'a') as domains_only_file:
+            domains_only_file.write(
+                "\n".join(str(dnsdumpster_out_domain) for dnsdumpster_out_domain in dnsdumpster_output))
     return dnsdumpster_output
 
 
@@ -83,7 +83,7 @@ async def certspotter_scraping(domain: str):
     # Verify that 'certspotter_req_logs' directory exists
     if not os.path.isdir(os.getcwd() + '/cache/certspotter_req_logs'):
         os.mkdir(os.getcwd() + '/cache/certspotter_req_logs')
-    async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as session:
+    async with aiohttp.ClientSession() as session:
         # Get-Request for each domain with JSON-Response
         async with session.get(f'https://api.certspotter.com/v1/issuances?domain={domain}&expand=dns_names',
                                headers={'Accept': 'application/json'}
@@ -112,7 +112,7 @@ async def hackertarget_scraping(domain: str):
     # Verify that 'hackertarget_req_logs' directory exists
     if not os.path.isdir(os.getcwd() + '/cache/hackertarget_req_logs'):
         os.mkdir(os.getcwd() + '/cache/hackertarget_req_logs')
-    async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as session:
+    async with aiohttp.ClientSession() as session:
         # Get-Request for each domain with TEXT-Response
         async with session.get(f'https://api.hackertarget.com/hostsearch/?q={domain}',
                                ) as resp:
@@ -121,13 +121,13 @@ async def hackertarget_scraping(domain: str):
                 print('SKIP | HackerTarget Daily Limit Exceeded')
             else:
 
-            # # FOR DEBUG
-            # with open(
-            #         os.getcwd() + '/cache/hackertarget_req_logs/' + 'stackoverflow.com_24-01-2024_00h03m56s_TEXT.txt',
-            #         'r') as post_req_from_file:
-            #     response_text = post_req_from_file.readlines()
+                # # FOR DEBUG
+                # with open(
+                #         os.getcwd() + '/cache/hackertarget_req_logs/' + 'stackoverflow.com_24-01-2024_00h03m56s_TEXT.txt',
+                #         'r') as post_req_from_file:
+                #     response_text = post_req_from_file.readlines()
 
-            # Write TEXT-Response to file
+                # Write TEXT-Response to file
                 with open(os.path.join(os.getcwd() + '/cache/hackertarget_req_logs',
                                        f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_TEXT.txt'),
                           'a') as text_request_file:
@@ -149,7 +149,7 @@ async def crtsh_scraping(domain: str):
     # Verify that 'crtsh_req_logs' directory exists
     if not os.path.isdir(os.getcwd() + '/cache/crtsh_req_logs'):
         os.mkdir(os.getcwd() + '/cache/crtsh_req_logs')
-    async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as session:
+    async with aiohttp.ClientSession() as session:
         # Get-Request for each domain with JSON-Response
         async with session.get(f'https://crt.sh/?q={domain}&output=json',
                                headers={'Accept': 'application/json'}
@@ -182,9 +182,9 @@ async def subdomain_gathering(domains: list[str]):
     for domain in domains:
         all_subdomains_set = set()
         # Find all possible subdomain/domain for each domain
-        #all_subdomains_set.update(await dnsdumpster_scraping(domain))
-        #all_subdomains_set.update(await certspotter_scraping(domain))
-        #all_subdomains_set.update(await hackertarget_scraping(domain))
+        # all_subdomains_set.update(await dnsdumpster_scraping(domain))
+        # all_subdomains_set.update(await certspotter_scraping(domain))
+        # all_subdomains_set.update(await hackertarget_scraping(domain))
         all_subdomains_set.update(await crtsh_scraping(domain))
         # Add own domain
         all_subdomains_set.add(domain)
@@ -206,7 +206,9 @@ async def subdomain_gathering(domains: list[str]):
               'a') as all_domains:
         all_domains.write(
             "\n".join(str(domain_in_all) for domain_in_all in sorted(all_domains_and_subdomains)))
+    return sorted(all_domains_and_subdomains)
+
 
 asyncio.run(subdomain_gathering(['cbre.com']))
 
-#asyncio.run(subdomain_gathering(['stackoverflow.com', 'facebook.com']))
+# asyncio.run(subdomain_gathering(['stackoverflow.com', 'facebook.com']))
