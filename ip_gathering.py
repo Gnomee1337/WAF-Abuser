@@ -7,6 +7,8 @@ import datetime
 import os
 from bs4 import BeautifulSoup
 
+import dns.resolver
+
 import re
 
 
@@ -38,11 +40,17 @@ async def ip_history_viewdnsinfo(domain: str):
                     "\n".join(str(viewdnsinfo_out_ips) for viewdnsinfo_out_ips in viewdnsinfo_ips_output))
     return list(viewdnsinfo_ips_output)
 
+
 async def ip_gathering(domains: list[str]):
     all_ips = set()
     for domain in domains:
         all_domain_ips = set()
+        # Find all possible IPs for each domain
         all_domain_ips.update(await ip_history_viewdnsinfo(domain))
+        # Remove original domain IP from list
+        domain_original_ips = dns.resolver.resolve(domain, 'A')
+        for ip in domain_original_ips:
+            all_domain_ips.discard(str(ip))
         # Write to file all possible ips for domain
         with open(os.path.join(os.getcwd() + '/cache',
                                f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'),
@@ -61,4 +69,5 @@ async def ip_gathering(domains: list[str]):
             "\n".join(str(ip_in_all) for ip_in_all in sorted(all_ips)))
     return sorted(all_ips)
 
-asyncio.run(ip_gathering(['cbre.com']))
+
+asyncio.run(ip_gathering(['stackoverflow.com']))

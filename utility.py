@@ -2,6 +2,31 @@ import os
 import ipaddress
 from itertools import chain
 import tldextract
+import asyncio
+import aiohttp
+
+from html_similarity import similarity, style_similarity, structural_similarity
+
+
+# Compare two HTML pages
+async def compare_two_pages(original_page: str, check_page: str):
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url=f"http://{original_page}", verify_ssl=False
+                                   ) as original_resp:
+                original_page_response = await original_resp.text()
+            async with session.get(url=f"http://{check_page}", verify_ssl=False
+                                   ) as check_resp:
+                check_page_response = await check_resp.text()
+            # Compare original_page with check_page and return list[dict{IP:Similarity_Percentage}]
+            return [{check_page, similarity(str(original_page_response), str(check_page_response), k=0.3) * 100}]
+        except aiohttp.ClientConnectorError as e:
+            # print('Connection Error | ', str(e))
+            print(f'Skipped | Error with {check_page}')
+            return 0
+
+
+asyncio.run(compare_two_pages('142.251.39.46', '104.18.32.7'))
 
 
 # Read all WAF Ranges from 'PublicWAFs.txt'
