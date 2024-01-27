@@ -22,43 +22,54 @@ async def ip_history_viewdnsinfo(domain: str):
         async with session.get(f'https://viewdns.info/iphistory/?domain={domain}'
                                ) as resp:
             response_text = await resp.text()
-            # Write HTML-Response to file
-            with open(os.path.join(os.getcwd() + '/cache/viewdnsinfo_req_logs',
-                                   f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt'),
-                      'a') as get_request_file:
-                get_request_file.write(response_text)
-            soup = BeautifulSoup(response_text.encode('utf-8'), 'html.parser')
-            rb = soup.find_all('table', {'border': '1'})
-            # Find all IPs in HTML-Response
-            ip_pattern = re.compile(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
-            viewdnsinfo_ips_output.update(ip_pattern.findall(str(rb)))
-            # Write only IPs to file
-            with open(os.path.join(os.getcwd() + '/cache/viewdnsinfo_req_logs',
-                                   f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_ips.txt'),
-                      'a') as domains_only_file:
-                domains_only_file.write(
-                    "\n".join(str(viewdnsinfo_out_ips) for viewdnsinfo_out_ips in viewdnsinfo_ips_output))
+            if not response_text.find("403 Forbidden - Naughty!"):
+                print('SKIP | Viewdnsinfo Daily Limit Exceeded. Possible bypass: new IP or use viewdns.info API Key')
+                return -403
+            else:
+                # Write HTML-Response to file
+                with open(os.path.join(os.getcwd() + '/cache/viewdnsinfo_req_logs',
+                                       f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt'),
+                          'a') as get_request_file:
+                    get_request_file.write(response_text)
+                soup = BeautifulSoup(response_text.encode('utf-8'), 'html.parser')
+                rb = soup.find_all('table', {'border': '1'})
+                # Find all IPs in HTML-Response
+                ip_pattern = re.compile(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+                viewdnsinfo_ips_output.update(ip_pattern.findall(str(rb)))
+                # Write only IPs to file
+                with open(os.path.join(os.getcwd() + '/cache/viewdnsinfo_req_logs',
+                                       f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_ips.txt'),
+                          'a') as domains_only_file:
+                    domains_only_file.write(
+                        "\n".join(str(viewdnsinfo_out_ips) for viewdnsinfo_out_ips in viewdnsinfo_ips_output))
     return list(viewdnsinfo_ips_output)
 
 
-async def ip_gathering(domains: list[str]):
+async def ip_gathering(domains: set):
     all_ips = set()
     for domain in domains:
         all_domain_ips = set()
         # Find all possible IPs for each domain
         all_domain_ips.update(await ip_history_viewdnsinfo(domain))
-        # Remove original domain IP from list
-        domain_original_ips = dns.resolver.resolve(domain, 'A')
-        for ip in domain_original_ips:
-            all_domain_ips.discard(str(ip))
-        # Write to file all possible ips for domain
-        with open(os.path.join(os.getcwd() + '/cache',
-                               f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'),
-                  'a') as all_subdomains_ips_file:
-            all_subdomains_ips_file.write(
-                "\n".join(str(ip_in_ips_for_domain) for ip_in_ips_for_domain in sorted(all_domain_ips)))
-        # Add all ips to 'all_ips'
-        all_ips.update(all_domain_ips)
+        if len(all_domain_ips) == 0:
+            continue
+        else:
+            # Remove original domain IP from list
+            try:
+                domain_original_ips = dns.resolver.resolve(domain, 'A')
+            except dns.exception.DNSException as e:
+                #print(e)
+                continue
+            for ip in domain_original_ips:
+                all_domain_ips.discard(str(ip))
+            # Write to file all possible ips for domain
+            with open(os.path.join(os.getcwd() + '/cache',
+                                   f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'),
+                      'a') as all_subdomains_ips_file:
+                all_subdomains_ips_file.write(
+                    "\n".join(str(ip_in_ips_for_domain) for ip_in_ips_for_domain in sorted(all_domain_ips)))
+            # Add all ips to 'all_ips'
+            all_ips.update(all_domain_ips)
         # Clear set() for next ips gathering
         all_domain_ips.clear()
     # Write to file combination of ALL ips for every given domain as input
@@ -69,5 +80,4 @@ async def ip_gathering(domains: list[str]):
             "\n".join(str(ip_in_all) for ip_in_all in sorted(all_ips)))
     return sorted(all_ips)
 
-
-asyncio.run(ip_gathering(['stackoverflow.com']))
+# asyncio.run(ip_gathering(['stackoverflow.com']))

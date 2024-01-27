@@ -177,7 +177,7 @@ async def crtsh_scraping(domain: str):
     return list(crtsh_output_flatten)
 
 
-async def subdomain_gathering(domains: list[str]):
+async def subdomain_gathering(domains: set):
     all_domains_and_subdomains = set()
     for domain in domains:
         all_subdomains_set = set()
@@ -189,16 +189,19 @@ async def subdomain_gathering(domains: list[str]):
         # Add own domain
         all_subdomains_set.add(domain)
         # Add TLD
-        all_subdomains_set.update(get_top_domains([domain]))
-        # Write to file all possible subdomains for domain
-        with open(os.path.join(os.getcwd() + '/cache',
-                               f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_subdomains.txt'),
-                  'a') as all_subdomains:
-            all_subdomains.write(
-                "\n".join(str(subdomain_in_all) for subdomain_in_all in sorted(all_subdomains_set)))
-        # Add all subdomains to 'all_domains_and_subdomains'
-        all_domains_and_subdomains.update(all_subdomains_set)
-        # Clear set() for next domain gathering
+        all_subdomains_set.update(await get_top_domains([domain]))
+        if len(all_subdomains_set) == 0:
+            continue
+        else:
+            # Write to file all possible subdomains for domain
+            with open(os.path.join(os.getcwd() + '/cache',
+                                   f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_subdomains.txt'),
+                      'a') as all_subdomains:
+                all_subdomains.write(
+                    "\n".join(str(subdomain_in_all) for subdomain_in_all in sorted(all_subdomains_set)))
+            # Add all subdomains to 'all_domains_and_subdomains'
+            all_domains_and_subdomains.update(all_subdomains_set)
+            # Clear set() for next domain gathering
         all_subdomains_set.clear()
     # Write to file combination of ALL domains/subdomains for every given domain as input
     with open(os.path.join(os.getcwd() + '/cache',
@@ -208,7 +211,6 @@ async def subdomain_gathering(domains: list[str]):
             "\n".join(str(domain_in_all) for domain_in_all in sorted(all_domains_and_subdomains)))
     return sorted(all_domains_and_subdomains)
 
-
-asyncio.run(subdomain_gathering(['cbre.com']))
+# asyncio.run(subdomain_gathering(['cbre.com']))
 
 # asyncio.run(subdomain_gathering(['stackoverflow.com', 'facebook.com']))
