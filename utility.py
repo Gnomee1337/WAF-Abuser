@@ -4,6 +4,7 @@ from itertools import chain
 import tldextract
 import asyncio
 import aiohttp
+from tqdm import tqdm
 
 from html_similarity import similarity, style_similarity, structural_similarity
 
@@ -12,22 +13,20 @@ from html_similarity import similarity, style_similarity, structural_similarity
 async def compare_two_pages(original_page: str, check_page: str):
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(url=f"https://{original_page}", verify_ssl=False
+            async with session.get(url=f"https://{original_page}", verify_ssl=False, timeout=3
                                    ) as original_resp:
                 original_page_response = await original_resp.text()
-            async with session.get(url=f"http://{check_page}", verify_ssl=False
+            async with session.get(url=f"http://{check_page}", verify_ssl=False, timeout=3
                                    ) as check_resp:
                 check_page_response = await check_resp.text()
             # Compare original_page with check_page and return list[dict{IP:Similarity_Percentage}]
-            print(f'COMPARED: {check_page} | {check_page, (similarity(str(original_page_response), str(check_page_response), k=0.3) * 100)}')
-            return (check_page, (similarity(str(original_page_response), str(check_page_response), k=0.3) * 100))
-        except aiohttp.ClientConnectorError as e:
+            return (check_page, int(similarity(str(original_page_response), str(check_page_response), k=0.3) * 100))
+        except aiohttp.ClientConnectorError as cce:
             # print('Connection Error | ', str(e))
-            print(f'Skipped | Error with {check_page}')
+            # print(f'Skipped | Error with {check_page}')
             return 0
-
-
-#asyncio.run(compare_two_pages('142.251.39.46', '104.18.32.7'))
+        except asyncio.TimeoutError as te:
+            return 0
 
 
 # Read all WAF Ranges from 'PublicWAFs.txt'

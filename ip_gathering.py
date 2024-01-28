@@ -11,6 +11,8 @@ import dns.resolver
 
 import re
 
+from tqdm import tqdm
+
 
 async def ip_history_viewdnsinfo(domain: str):
     viewdnsinfo_ips_output = set()
@@ -19,7 +21,8 @@ async def ip_history_viewdnsinfo(domain: str):
         os.mkdir(os.getcwd() + '/cache/viewdnsinfo_req_logs')
     async with aiohttp.ClientSession() as session:
         # GET-Request for each domain
-        async with session.get(f'https://viewdns.info/iphistory/?domain={domain}'
+        async with session.get(f'https://viewdns.info/iphistory/?domain={domain}',
+                               timeout=3
                                ) as resp:
             response_text = await resp.text()
             if not response_text.find("403 Forbidden - Naughty!"):
@@ -51,17 +54,18 @@ async def ip_gathering(domains: set):
         all_domain_ips = set()
         # Find all possible IPs for each domain
         all_domain_ips.update(await ip_history_viewdnsinfo(domain))
+        # Not found any IPs
         if len(all_domain_ips) == 0:
             continue
         else:
             # Remove original domain IP from list
             try:
                 domain_original_ips = dns.resolver.resolve(domain, 'A')
+                for ip in domain_original_ips:
+                    all_domain_ips.discard(str(ip))
             except dns.exception.DNSException as e:
-                #print(e)
+                # print(e)
                 continue
-            for ip in domain_original_ips:
-                all_domain_ips.discard(str(ip))
             # Write to file all possible ips for domain
             with open(os.path.join(os.getcwd() + '/cache',
                                    f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'),

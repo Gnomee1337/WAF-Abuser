@@ -12,6 +12,9 @@ import tldextract
 from utility import *
 from subdomain_gathering import subdomain_gathering
 from ip_gathering import ip_gathering
+from colorama import init as colorama_init
+from colorama import Fore
+from colorama import Style
 
 
 async def create_logger(name: str, logger_level: logging):
@@ -48,7 +51,8 @@ async def arguments():
 
 async def main():
     args = await arguments()
-    logger = await create_logger("main-logger", logging.DEBUG)
+    logger = await create_logger("main-logger", logging.CRITICAL)
+    colorama_init()
     # Get domain name from arguments
     input_domains = set()
     similarity_rate = args.similarity_rate
@@ -58,43 +62,54 @@ async def main():
     elif args.input_domain:
         input_domains.add(args.input_domain)
     else:
-        return 1
+        raise ValueError("Improper -d/-f argument")
     # Gathering subdomains for input domains
-    print("Gathering subdomains")
+    print("1. Gathering subdomains")
     find_subdomains = set()
     find_subdomains.update(await subdomain_gathering(input_domains))
     logger.debug(find_subdomains)
     # Gathering IPs for subdomains
-    print("Gathering IPs")
+    print("2. Gathering IPs")
     find_ips = set()
     find_ips.update(await ip_gathering(find_subdomains))
     logger.debug(find_ips)
     # Filtering out WAF-IPs from gathered IPs
-    print("Filtering out WAF-IPs")
+    print("3. Filtering out WAF IPs")
     filtered_out_ips = set()
     filtered_out_ips.update(await filter_out_waf_ips(find_ips))
     logger.debug(filtered_out_ips)
-    # Compare input domain content with filtered out IPs content
-    similarity_output = set()
-    for input_domain in input_domains:
-        for filtered_ip in filtered_out_ips:
-            compare_result = await compare_two_pages(original_page=input_domain, check_page=filtered_ip)
-            print(f'MAIN Compare_result: {compare_result}')
-            if compare_result == 0:
-                continue
-            elif compare_result[1] > similarity_rate:
-                similarity_output.add(compare_result)
-            else:
-                continue
-    # Output final
-    print("FINAL OUTPUT")
-    for ip_and_rate in similarity_output:
-        print(f'{ip_and_rate[0]} | {ip_and_rate[1]}%')
-
-    # get_top_domains(['google.com', 'https://facebook.com', 'http://forums.bbc.co.uk', 'twitter.com:443', '', ' ', ''])
-    # is_ip_in_publicWAF(['197.234.240.1','198.234.240.1','197.234.240.22','149.126.72.1','104.32.0.0'])
-    # for i in ip_ranges:
-    #    logger.info(i)
+    # All IPs were from WAF-Ranges
+    if len(filtered_out_ips) == 0:
+        print(f"{Fore.GREEN}Found 0 possible non-WAF IPs")
+        return 0
+    else:
+        print("4. Comparing found IPs with original domain")
+        # Compare input domain content with filtered out IPs content
+        similarity_output = set()
+        for input_domain in input_domains:
+            for filtered_ip in filtered_out_ips:
+                compare_result = await compare_two_pages(original_page=input_domain, check_page=filtered_ip)
+                # Possible connection error/unavailable page
+                if compare_result == 0:
+                    continue
+                # Add if similarity rate > than specified (Default 70%)
+                elif compare_result[1] > int(similarity_rate):
+                    similarity_output.add(compare_result)
+                else:
+                    continue
+        # Output final
+        if len(similarity_output) == 0:
+            print(
+                f"5. {Fore.YELLOW}Found 0 pages with similarity > {str(similarity_rate)}%.{Fore.RESET}"
+                "\nYou can reduce the similarity percentage [--similarity_rate 70]"
+                "\nDefault similarity value: 70")
+            return 0
+        else:
+            print(f"5. {Fore.GREEN}Found possible IPs:")
+            row_format = "{:>15}" * (len(similarity_output) + 1)
+            print(row_format.format("IP", "Similarity"))
+            for ip_and_rate in similarity_output:
+                print(row_format.format(ip_and_rate[0], str(ip_and_rate[1]) + '%'))
 
 
 if __name__ == '__main__':

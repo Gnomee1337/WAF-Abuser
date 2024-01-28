@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import json
 from itertools import chain
 from utility import get_top_domains
+from tqdm import tqdm
 
 '''
 CREATE EXCEPTION ON DNSDUMPSTER DAY LIMIT
