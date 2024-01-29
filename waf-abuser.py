@@ -27,24 +27,24 @@ async def create_logger(name: str, logger_level: logging):
     return logger
 
 
-'''CHANGE ARGS DESCRIPTION'''
-
-
 async def arguments():
-    parser = argparse.ArgumentParser(description='CHANGE DESC')
+    parser = argparse.ArgumentParser(
+        description='WAF-Abuser will search the history for unprotected IPs associated with given domains to bypass the WAF over a direct connection')
     required = parser.add_argument_group("Required arguments")
     optional = parser.add_argument_group("Optional arguments")
     input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument('-d', '--domain', action='store', dest='input_domain',
-                             help='Specify FQDN/Domain for search',
+    input_group.add_argument('-d', '--domain', action='store', dest='input_domain', metavar='"domain"',
+                             help='Specify the FQDN/Domain for searches',
                              )
-    input_group.add_argument('-f', '--file', action='store', dest='file_domains', metavar='FILE', nargs='*',
-                             help='Specify file with Domains for search',
+    input_group.add_argument('-f', '--file', action='store', dest='file_domains', metavar='FILE with domains',
+                             nargs='*',
+                             help='Specify the file with domains for searches',
                              )
-    optional.add_argument('--similarity-rate', action='store', dest='similarity_rate', default=70,
-                          help='Specify minimum passing percentage of page similarity (Default 70%)',
+    optional.add_argument('--similarity-rate', action='store', dest='similarity_rate', default=70, metavar='[0-100]',
+                          help='Specify minimum passing percentage for page similarity. Default value: 70',
                           )
-    optional.add_argument('--domains-only', action='store_true', dest='domains_only', help='Find only domains and subdomains',)
+    optional.add_argument('--domains-only', action='store_true', dest='domains_only',
+                          help='Find only domains and subdomains', )
     return parser.parse_args()
 
 
