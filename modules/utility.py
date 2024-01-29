@@ -1,12 +1,15 @@
-import os
-import ipaddress
-from itertools import chain
-import tldextract
 import asyncio
-import aiohttp
-from tqdm import tqdm
+import ipaddress
+import logging
+import os
+from itertools import chain
 
-from html_similarity import similarity, style_similarity, structural_similarity
+import aiohttp
+import tldextract
+from html_similarity import similarity
+
+logger = logging.getLogger(__name__)
+logging.basicConfig()
 
 
 # Compare two HTML pages
@@ -19,11 +22,11 @@ async def compare_two_pages(original_page: str, check_page: str):
             async with session.get(url=f"http://{check_page}", verify_ssl=False, timeout=3
                                    ) as check_resp:
                 check_page_response = await check_resp.text()
-            # Compare original_page with check_page and return list[dict{IP:Similarity_Percentage}]
+            # Compare original_page with check_page and return list[tuple(IP,Similarity_Percentage),...]
             return (check_page, int(similarity(str(original_page_response), str(check_page_response), k=0.3) * 100))
         except aiohttp.ClientConnectorError as cce:
-            # print('Connection Error | ', str(e))
-            # print(f'Skipped | Error with {check_page}')
+            logger.debug('Connection Error | ', str(cce))
+            logger.info(f'Skipped | Error with {check_page}')
             return 0
         except asyncio.TimeoutError as te:
             return 0
@@ -31,7 +34,7 @@ async def compare_two_pages(original_page: str, check_page: str):
 
 # Read all WAF Ranges from 'PublicWAFs.txt'
 async def parse_public_waf_ranges():
-    with open("PublicWAFs.txt") as publicWAFs:
+    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data/PublicWAFs.txt'), 'r') as publicWAFs:
         next(publicWAFs)
         return [ip.strip() for ip in publicWAFs]
 
@@ -50,7 +53,8 @@ async def filter_out_waf_ips(ips_to_check: set):
 # Extract TLD from each domain
 async def get_top_domains(domains: list[str]):
     domains = list(filter(None, domains))
-    custom_tldextract = tldextract.TLDExtract(cache_dir=f'{os.getcwd()}' + '/cache/tldextract-cache')
+    custom_tldextract = tldextract.TLDExtract(
+        cache_dir=f'{os.path.normpath(os.path.join(os.path.realpath(__file__), '../../cache/tldextract-cache'))}')
     return [str(
         custom_tldextract.extract_str(domain).domain
         + '.'

@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 import argparse
+import datetime
 import fileinput
-import ipaddress
-import logging
-import os
 import sys
 import threading
 import traceback
-from itertools import chain
-import tldextract
-from utility import *
-from subdomain_gathering import subdomain_gathering
-from ip_gathering import ip_gathering
-from colorama import init as colorama_init
+import os
+
 from colorama import Fore
-from colorama import Style
+from colorama import init as colorama_init
+
+from modules.ip_gathering import ip_gathering
+from modules.subdomain_gathering import subdomain_gathering
+from modules.utility import *
 
 
 async def create_logger(name: str, logger_level: logging):
@@ -51,7 +49,7 @@ async def arguments():
 
 async def main():
     args = await arguments()
-    logger = await create_logger("main-logger", logging.CRITICAL)
+    logger = await create_logger(__name__, logging.CRITICAL)
     colorama_init()
     # Get domain name from arguments
     input_domains = set()
@@ -97,19 +95,28 @@ async def main():
                     similarity_output.add(compare_result)
                 else:
                     continue
-        # Output final
-        if len(similarity_output) == 0:
-            print(
-                f"5. {Fore.YELLOW}Found 0 pages with similarity > {str(similarity_rate)}%.{Fore.RESET}"
-                "\nYou can reduce the similarity percentage [--similarity_rate 70]"
-                "\nDefault similarity value: 70")
-            return 0
-        else:
-            print(f"5. {Fore.GREEN}Found possible IPs:")
-            row_format = "{:>15}" * (len(similarity_output) + 1)
-            print(row_format.format("IP", "Similarity"))
-            for ip_and_rate in similarity_output:
-                print(row_format.format(ip_and_rate[0], str(ip_and_rate[1]) + '%'))
+    # Output final results
+    if len(similarity_output) == 0:
+        print(
+            f"5. {Fore.YELLOW}Found 0 pages with similarity > {str(similarity_rate)}%.{Fore.RESET}"
+            "\nYou can reduce the similarity percentage [--similarity_rate 70]"
+            "\nDefault similarity value: 70")
+        return 0
+    else:
+        print(f"5. {Fore.GREEN}Found possible IPs:")
+        row_format = "{:>15}" * (len(similarity_output) + 1)
+        print(row_format.format("IP", "Similarity"))
+        for ip_and_rate in similarity_output:
+            print(row_format.format(ip_and_rate[0], str(ip_and_rate[1]) + '%'))
+        # Verify that 'output' directory exists
+        if not os.path.isdir(os.path.normpath(os.path.dirname(os.path.join(os.path.realpath(__file__), '../output/')))):
+            os.makedirs(os.path.normpath(os.path.dirname(os.path.join(os.path.realpath(__file__), '../output/'))))
+        with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
+                                                f'../output/possible_WAF_bypass_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.txt')),
+                  'a') as waf_bypass_to_file:
+            waf_bypass_to_file.write(
+                "\n".join(row_format.format(ip_and_rate[0], str(ip_and_rate[1]) + '%') for ip_and_rate in
+                          similarity_output))
 
 
 if __name__ == '__main__':
