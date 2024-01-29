@@ -41,9 +41,10 @@ async def arguments():
     input_group.add_argument('-f', '--file', action='store', dest='file_domains', metavar='FILE', nargs='*',
                              help='Specify file with Domains for search',
                              )
-    optional.add_argument('--similarity_rate', action='store', dest='similarity_rate', default=70,
+    optional.add_argument('--similarity-rate', action='store', dest='similarity_rate', default=70,
                           help='Specify minimum passing percentage of page similarity (Default 70%)',
                           )
+    optional.add_argument('--domains-only', action='store_true', dest='domains_only', help='Find only domains and subdomains',)
     return parser.parse_args()
 
 
@@ -54,6 +55,7 @@ async def main():
     # Get domain name from arguments
     input_domains = set()
     similarity_rate = args.similarity_rate
+    domains_only_flag = args.domains_only
     if args.file_domains:
         for line in fileinput.input(files=args.file_domains):
             input_domains.add(line.strip())
@@ -66,6 +68,12 @@ async def main():
     find_subdomains = set()
     find_subdomains.update(await subdomain_gathering(input_domains))
     logger.debug(find_subdomains)
+    if domains_only_flag:
+        print(f"{Fore.GREEN}Found domains/subdomains:{Fore.RESET}")
+        for domain in find_subdomains:
+            print(domain)
+        print(f"File output: {os.path.normpath(os.path.join(os.path.realpath(__file__), '../cache/'))}")
+        return 0
     # Gathering IPs for subdomains
     print("2. Gathering IPs")
     find_ips = set()
