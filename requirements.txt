@@ -1,0 +1,6 @@
+aiohttp==3.9.2
+beautifulsoup4==4.12.3
+colorama==0.4.6
+dnspython==2.5.0
+html_similarity==0.3.3
+tldextract==5.1.1
