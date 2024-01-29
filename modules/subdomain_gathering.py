@@ -194,7 +194,7 @@ async def subdomain_gathering(domains: set):
                     "\n".join(str(subdomain_in_all) for subdomain_in_all in sorted(all_subdomains_set)))
             # Add all subdomains to 'all_domains_and_subdomains'
             all_domains_and_subdomains.update(all_subdomains_set)
-            # Clear set() for next domain gathering
+        # Clear set() for next domain gathering
         all_subdomains_set.clear()
     # Write to file combination of ALL domains/subdomains for every given domain as input
     with open(os.path.normpath(os.path.join(os.path.realpath(__file__),

@@ -3,6 +3,7 @@
 tldextract-cache
 *_req_logs
 cache/
+output/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

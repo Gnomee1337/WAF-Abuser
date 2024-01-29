@@ -85,16 +85,21 @@ async def main():
         # Compare input domain content with filtered out IPs content
         similarity_output = set()
         for input_domain in input_domains:
-            for filtered_ip in filtered_out_ips:
-                compare_result = await compare_two_pages(original_page=input_domain, check_page=filtered_ip)
-                # Possible connection error/unavailable page
-                if compare_result == 0:
-                    continue
-                # Add if similarity rate > than specified (Default 70%)
-                elif compare_result[1] > int(similarity_rate):
-                    similarity_output.add(compare_result)
-                else:
-                    continue
+            current_domain_content = await get_page_content(input_domain)
+            if current_domain_content == 0:
+                continue
+            else:
+                for filtered_ip in filtered_out_ips:
+                    compare_result = await compare_two_pages(original_page=current_domain_content,
+                                                             check_page=filtered_ip)
+                    # Possible connection error/unavailable page
+                    if compare_result == 0:
+                        continue
+                    # Add if similarity rate > than specified (Default 70%)
+                    elif compare_result[1] > int(similarity_rate):
+                        similarity_output.add(compare_result)
+                    else:
+                        continue
     # Output final results
     if len(similarity_output) == 0:
         print(

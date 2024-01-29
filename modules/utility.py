@@ -12,18 +12,33 @@ logger = logging.getLogger(__name__)
 logging.basicConfig()
 
 
+async def get_page_content(get_page: str):
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url=f"https://{get_page}", verify_ssl=False, timeout=3
+                                   ) as get_resp:
+                page_response = await get_resp.text()
+            return page_response
+        except aiohttp.ClientConnectorError as cce:
+            logger.debug('Connection Error | ', str(cce))
+            logger.info(f'Skipped | Error with {get_page}')
+            return 0
+        except asyncio.TimeoutError as te:
+            return 0
+
+
 # Compare two HTML pages
 async def compare_two_pages(original_page: str, check_page: str):
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(url=f"https://{original_page}", verify_ssl=False, timeout=3
-                                   ) as original_resp:
-                original_page_response = await original_resp.text()
+            # async with session.get(url=f"https://{original_page}", verify_ssl=False, timeout=3
+            #                        ) as original_resp:
+            #     original_page_response = await original_resp.text()
             async with session.get(url=f"http://{check_page}", verify_ssl=False, timeout=3
                                    ) as check_resp:
                 check_page_response = await check_resp.text()
             # Compare original_page with check_page and return list[tuple(IP,Similarity_Percentage),...]
-            return (check_page, int(similarity(str(original_page_response), str(check_page_response), k=0.3) * 100))
+            return (check_page, int(similarity(str(original_page), str(check_page_response), k=0.3) * 100))
         except aiohttp.ClientConnectorError as cce:
             logger.debug('Connection Error | ', str(cce))
             logger.info(f'Skipped | Error with {check_page}')
