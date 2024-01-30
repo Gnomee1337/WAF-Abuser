@@ -69,7 +69,7 @@ async def filter_out_waf_ips(ips_to_check: set):
 async def get_top_domains(domains: list[str]):
     domains = list(filter(None, domains))
     custom_tldextract = tldextract.TLDExtract(
-        cache_dir=f'{os.path.normpath(os.path.join(os.path.realpath(__file__), '../../cache/tldextract-cache'))}')
+        cache_dir=f"{os.path.normpath(os.path.join(os.path.realpath(__file__), '../../cache/tldextract-cache'))}")
     return [str(
         custom_tldextract.extract_str(domain).domain
         + '.'

@@ -15,6 +15,18 @@ from modules.subdomain_gathering import subdomain_gathering
 from modules.utility import *
 
 
+async def print_banner():
+    colorama_init()
+    banner = f"""{Fore.MAGENTA}
+    +-----------------------------+
+    |╦ ╦╔═╗╔═╗  ╔═╗╔╗ ╦ ╦╔═╗╔═╗╦═╗|
+    |║║║╠═╣╠╣   ╠═╣╠╩╗║ ║╚═╗║╣ ╠╦╝|
+    |╚╩╝╩ ╩╚    ╩ ╩╚═╝╚═╝╚═╝╚═╝╩╚═|
+    +-----------------------------+
+{Fore.RESET}"""
+    print(banner)
+
+
 async def create_logger(name: str, logger_level: logging):
     if logger_level is logging.DEBUG:
         logging.basicConfig(stream=sys.stdout,
@@ -52,6 +64,8 @@ async def main():
     args = await arguments()
     logger = await create_logger(__name__, logging.CRITICAL)
     colorama_init()
+    # Print banner
+    await print_banner()
     # Get domain name from arguments
     input_domains = set()
     similarity_rate = args.similarity_rate
@@ -69,7 +83,7 @@ async def main():
     find_subdomains.update(await subdomain_gathering(input_domains))
     logger.debug(find_subdomains)
     if domains_only_flag:
-        print(f"{Fore.GREEN}Found domains/subdomains:{Fore.RESET}")
+        print(f"{Fore.GREEN}Found {len(find_subdomains)} domains/subdomains:{Fore.RESET}")
         for domain in find_subdomains:
             print(domain)
         print(f"File output: {os.path.normpath(os.path.join(os.path.realpath(__file__), '../cache/'))}")
@@ -111,7 +125,7 @@ async def main():
     # Output final results
     if len(similarity_output) == 0:
         print(
-            f"5. {Fore.YELLOW}Found 0 pages with similarity > {str(similarity_rate)}%.{Fore.RESET}"
+            f"5. {Fore.YELLOW}Found 0 pages with similarity > {str(similarity_rate)}%{Fore.RESET}"
             "\nYou can reduce the similarity percentage [--similarity_rate 70]"
             "\nDefault similarity value: 70")
         return 0

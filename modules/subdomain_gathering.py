@@ -115,7 +115,7 @@ async def hackertarget_scraping(domain: str):
                                ) as resp:
             response_text = await resp.text(encoding='utf-8')
             if not response_text.find('API count exceeded'):
-                print('SKIP | HackerTarget Daily Limit Exceeded')
+                print('SKIP HackerTarget | Daily Limit Exceeded. (Possible bypass: new IP or use hackertarget.com API Key)')
             else:
                 # Write TEXT-Response to file
                 with open(os.path.normpath(os.path.join(os.path.realpath(__file__),

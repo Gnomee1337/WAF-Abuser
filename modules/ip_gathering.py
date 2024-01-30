@@ -25,7 +25,7 @@ async def ip_history_viewdnsinfo(domain: str):
                                ) as resp:
             response_text = await resp.text()
             if not response_text.find("403 Forbidden - Naughty!"):
-                print('SKIP | Viewdnsinfo Daily Limit Exceeded. Possible bypass: new IP or use viewdns.info API Key')
+                print('SKIP Viewdnsinfo | Daily Limit Exceeded. (Possible bypass: new IP or use viewdns.info API Key)')
                 return -403
             else:
                 # Write HTML-Response to file
