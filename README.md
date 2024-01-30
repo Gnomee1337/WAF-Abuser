@@ -63,3 +63,4 @@ cache/                           - Directory for cached intermediate results (.j
 - https://github.com/vincentcox/bypass-firewalls-by-DNS-history/
 - https://dualuse.io/blog/curryfinger/
 - https://github.com/Warflop/cloudbunny/
+- https://github.com/matiskay/html-similarity/
