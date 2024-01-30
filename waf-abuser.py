@@ -46,7 +46,7 @@ async def arguments():
     optional = parser.add_argument_group("Optional arguments")
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-d', '--domain', action='store', dest='input_domain', metavar='"domain"',
-                             help='Specify the FQDN/Domain for searches',
+                             help='Specify the domain for searches',
                              )
     input_group.add_argument('-f', '--file', action='store', dest='file_domains', metavar='FILE with domains',
                              nargs='*',
