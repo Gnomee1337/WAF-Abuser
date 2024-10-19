@@ -2,18 +2,12 @@ import datetime
 import json
 import logging
 import os
-from itertools import chain
-
 import aiohttp
+from itertools import chain
 from bs4 import BeautifulSoup
-
 from modules.utility import get_top_domains
 
 logger = logging.getLogger(__name__)
-
-'''
-CREATE EXCEPTION ON DNSDUMPSTER DAY LIMIT
-'''
 
 
 async def dnsdumpster_scraping(domain: str):
@@ -115,7 +109,8 @@ async def hackertarget_scraping(domain: str):
                                ) as resp:
             response_text = await resp.text(encoding='utf-8')
             if not response_text.find('API count exceeded'):
-                print('SKIP HackerTarget | Daily Limit Exceeded. (Possible bypass: new IP or use hackertarget.com API Key)')
+                print(
+                    'SKIP HackerTarget | Daily Limit Exceeded. (Possible bypass: new IP or use hackertarget.com API Key)')
             else:
                 # Write TEXT-Response to file
                 with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
