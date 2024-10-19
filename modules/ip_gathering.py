@@ -26,7 +26,7 @@ class IPGatherer:
     async def _ip_history_viewdnsinfo(self, domain: str):
         viewdnsinfo_ips_output = set()
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://viewdns.info/iphistory/?domain={domain}', timeout=3) as resp:
+            async with session.get(f'https://viewdns.info/iphistory/?domain={domain}', timeout=30) as resp:
                 response_text = await resp.text()
                 if "403 Forbidden - Naughty!" in response_text:
                     print(
@@ -34,11 +34,8 @@ class IPGatherer:
                     return -403
                 # Write HTML response to file
                 await self._write_html_response(domain, response_text)
-                # Extract IPs from HTML response
+                # Setup soup
                 soup = BeautifulSoup(response_text.encode('utf-8'), 'html.parser')
-                tables = soup.find_all('table', {'border': '1'})
-                # Extract text from all tables
-                table_text = ' '.join(table.get_text() for table in tables)
                 # Improved regex for IP address extraction
                 ip_pattern = re.compile(
                     r'\b(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.'
@@ -46,8 +43,15 @@ class IPGatherer:
                     r'(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.'
                     r'(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b'
                 )
-                # Search in the extracted text
-                viewdnsinfo_ips_output.update(ip_pattern.findall(table_text))
+                # Find the table containing the IP addresses
+                tables = soup.find_all('table', {'border': '1'})
+                for table in tables:  # Iterate over each table found
+                    # Iterate through all <td> elements in the table
+                    for td in table.find_all('td'):
+                        text = td.get_text(strip=True)
+                        # Check if the text matches the IP pattern
+                        if ip_pattern.match(text):
+                            viewdnsinfo_ips_output.add(text)
                 # Write only extracted IPs to file
                 await self._write_extracted_ips_to_file(domain, viewdnsinfo_ips_output)
         return viewdnsinfo_ips_output

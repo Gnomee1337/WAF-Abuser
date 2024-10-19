@@ -9,6 +9,7 @@ import traceback
 import logging
 import asyncio
 from colorama import Fore, init as colorama_init
+
 from modules.utility import WAFUtils
 from modules.subdomain_gathering import SubdomainGatherer
 from modules.ip_gathering import IPGatherer
@@ -18,8 +19,11 @@ class WAFAbuser:
     def __init__(self, logger_level=logging.CRITICAL):
         self.logger = self.create_logger(logger_level)
         self.input_domains = set()
-        self.similarity_rate = 70
+        self.similarity_rate = 0
         self.domains_only_flag = False
+        self.ip_gatherer = IPGatherer()
+        self.waf_utils = WAFUtils()
+        self.subdomain_gatherer = SubdomainGatherer(self.input_domains)
 
     @staticmethod
     def create_logger(logger_level):
@@ -85,13 +89,13 @@ class WAFAbuser:
 
     async def gather_ips(self, subdomains):
         print("2. Gathering IPs")
-        find_ips = await IPGatherer.gather_ips(subdomains)
+        find_ips = await self.ip_gatherer.gather_ips(subdomains)
         self.logger.debug(find_ips)
         return find_ips
 
     async def filter_waf_ips(self, ips):
         print("3. Filtering out WAF IPs")
-        filtered_out_ips = await WAFUtils.filter_out_waf_ips(ips)
+        filtered_out_ips = await self.waf_utils.filter_out_waf_ips(ips)
         self.logger.debug(filtered_out_ips)
         return filtered_out_ips
 
@@ -100,7 +104,7 @@ class WAFAbuser:
         # Compare input domain content with filtered out IPs content
         similarity_output = set()
         for input_domain in self.input_domains:
-            current_domain_content = await WAFUtils.get_page_content(input_domain)
+            current_domain_content = await self.waf_utils.get_page_content(input_domain)
             if current_domain_content == 0:
                 continue  # Skip if there was an error fetching the domain content
             await self.compare_with_filtered_ips(current_domain_content, filtered_out_ips, similarity_output)
@@ -108,8 +112,8 @@ class WAFAbuser:
 
     async def compare_with_filtered_ips(self, current_domain_content, filtered_out_ips, similarity_output):
         for filtered_ip in filtered_out_ips:
-            compare_result = await WAFUtils.compare_two_pages(original_page=current_domain_content,
-                                                              check_page=filtered_ip)
+            compare_result = await self.waf_utils.compare_two_pages(original_page=current_domain_content,
+                                                                    check_page=filtered_ip)
             # Add if similarity rate > than specified (Default 70%)
             if compare_result != 0 and compare_result[1] > int(self.similarity_rate):
                 similarity_output.add(compare_result)

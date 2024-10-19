@@ -6,8 +6,9 @@ import aiofiles
 import aiohttp
 from itertools import chain
 from bs4 import BeautifulSoup
-from modules.utility import WAFUtils
 from abc import ABC, abstractmethod
+
+from modules.utility import WAFUtils
 
 
 class BaseScraper(ABC):
@@ -294,18 +295,17 @@ class SubdomainGatherer:
         self.all_subdomains = set()
 
     async def gather_subdomains(self):
+        waf_utils = WAFUtils()
         for domain in self.domains:
             domain_subdomains = set()
             domain_subdomains.update(await self.scrape_domain(domain))
             await self._write_domain_subdomains_to_file(domain, domain_subdomains)
-
-            # Add domain and top-level domain (TLD)
+            # Add domain itself
             domain_subdomains.add(domain)
-            domain_subdomains.update(await WAFUtils.get_top_domains([domain]))
-
+            # And add top-level domain (TLD)
+            domain_subdomains.update(await waf_utils.get_top_domains([domain]))
             # Add subdomains to overall set
             self.all_subdomains.update(domain_subdomains)
-
         # Write all domains/subdomains to a final file
         await self._write_all_subdomains_to_file()
         return sorted(self.all_subdomains)
@@ -316,9 +316,9 @@ class SubdomainGatherer:
         scrapers = [
             # Add other scrapers here (DnsDumpsterScraper, CertSpotterScraper, etc.)
             CrtShScraper(domain),
-            DnsDumpsterScraper(domain),
-            CertSpotterScraper(domain),
-            HackerTargetScraper(domain),
+            # DnsDumpsterScraper(domain),
+            # CertSpotterScraper(domain),
+            # HackerTargetScraper(domain),
         ]
         for scraper in scrapers:
             subdomains.update(await scraper.scrape())
