@@ -6,14 +6,16 @@ import fileinput
 import sys
 import threading
 import traceback
+import logging
+import asyncio
 from colorama import Fore, init as colorama_init
-from modules.ip_gathering import ip_gathering
-from modules.subdomain_gathering import subdomain_gathering
 from modules.utility import WAFUtils
+from modules.subdomain_gathering import SubdomainGatherer
+from modules.ip_gathering import IPGatherer
 
 
 class WAFAbuser:
-    def __init__(self, logger_level=WAFUtils.logging.CRITICAL):
+    def __init__(self, logger_level=logging.CRITICAL):
         self.logger = self.create_logger(logger_level)
         self.input_domains = set()
         self.similarity_rate = 70
@@ -23,16 +25,16 @@ class WAFAbuser:
     def create_logger(logger_level):
         log_format = (
             '[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s'
-            if logger_level == WAFUtils.logging.DEBUG
+            if logger_level == logging.DEBUG
             else '{%(filename)s:%(lineno)d} | %(message)s'
         )
-        WAFUtils.logging.basicConfig(
+        logging.basicConfig(
             stream=sys.stdout,
             format=log_format,
             encoding='utf-8',
             level=logger_level
         )
-        return WAFUtils.logging.getLogger(__name__)
+        return logging.getLogger(__name__)
 
     @staticmethod
     async def print_banner():
@@ -77,13 +79,13 @@ class WAFAbuser:
 
     async def gather_subdomains(self):
         print("1. Gathering subdomains")
-        find_subdomains = await subdomain_gathering(self.input_domains)
+        find_subdomains = await SubdomainGatherer(self.input_domains).gather_subdomains()
         self.logger.debug(f"Subdomains gathered: {find_subdomains}")
         return find_subdomains
 
     async def gather_ips(self, subdomains):
         print("2. Gathering IPs")
-        find_ips = await ip_gathering(subdomains)
+        find_ips = await IPGatherer.gather_ips(subdomains)
         self.logger.debug(find_ips)
         return find_ips
 
@@ -166,7 +168,7 @@ class WAFAbuser:
 if __name__ == '__main__':
     scanner = WAFAbuser()
     try:
-        WAFUtils.asyncio.run(scanner.run())
+        asyncio.run(scanner.run())
     except (KeyboardInterrupt, SystemExit):
         pass  # Graceful exit on user interrupt or system exit
     except Exception:

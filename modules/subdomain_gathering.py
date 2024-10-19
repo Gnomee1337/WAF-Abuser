@@ -1,200 +1,337 @@
+import asyncio
 import datetime
 import json
-import logging
 import os
+import aiofiles
 import aiohttp
 from itertools import chain
 from bs4 import BeautifulSoup
-from modules.utility import get_top_domains
+from modules.utility import WAFUtils
+from abc import ABC, abstractmethod
 
-logger = logging.getLogger(__name__)
+
+class BaseScraper(ABC):
+    """Abstract base class for all scrapers."""
+
+    def __init__(self, domain: str):
+        self.domain = domain
+        self.cache_dir = os.path.normpath(os.path.join(os.path.realpath(__file__), '../../cache'))
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+    @abstractmethod
+    async def scrape(self):
+        """Method to perform the actual scraping logic, to be implemented by subclasses."""
+        pass
+
+    async def _write_to_file(self, content: str, file_name: str):
+        """Asynchronously write content to a file using aiofiles."""
+        file_path = os.path.join(self.cache_dir, file_name)
+        async with aiofiles.open(file_path, 'a') as file:
+            await file.write(content)
 
 
-async def dnsdumpster_scraping(domain: str):
-    dnsdumpster_output = []
-    CSRFtoken = ''
-    # Verify that 'dnsdumpster_req_logs' directory exists
-    if not os.path.isdir(os.path.normpath(
-            os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/dnsdumpster_req_logs/')))):
-        os.makedirs(
-            os.path.normpath(
-                os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/dnsdumpster_req_logs/'))))
-    async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as session:
-        # GET-Request for each domain to receive unique CSRFToken
-        async with session.get('https://dnsdumpster.com') as resp:
-            cookies = session.cookie_jar.filter_cookies('https://dnsdumpster.com')
-            CSRFtoken = str(cookies.get('csrftoken')).split('Set-Cookie: csrftoken=')[1]
-        # POST-Request for each domain
-        async with session.post('https://dnsdumpster.com',
-                                data={'csrfmiddlewaretoken': CSRFtoken,
-                                      'targetip': domain,
-                                      'user': 'free'},
-                                headers={'Host': 'dnsdumpster.com',
-                                         'Pragma': 'no-cache',
-                                         'Cache-Control': 'no-cache',
-                                         'Upgrade-Insecure-Requests': '1',
-                                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
-                                         'Origin': 'https://dnsdumpster.com',
-                                         'Content-Type': 'application/x-www-form-urlencoded',
-                                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                                         'Referer': 'https://dnsdumpster.com/',
-                                         'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
-                                         'Cookie': f'csrftoken={CSRFtoken}'}
-                                ) as resp:
-            response_text = await resp.text()
-        # Write HTML-Response to file
-        with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                f'../../cache/dnsdumpster_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt')),
-                  'a') as post_request_file:
-            post_request_file.write(response_text)
-        soup = BeautifulSoup(response_text.encode('utf-8'), 'html.parser')
+class JsonScraper(BaseScraper):
+    """Abstract class for scrapers that expect JSON responses."""
+
+    async def fetch_json(self, url: str):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers={'Accept': 'application/json'}) as resp:
+                return await resp.json(encoding='utf-8')
+
+
+class CrtShScraper(JsonScraper):
+    """Scraper for crt.sh"""
+
+    def __init__(self, domain: str):
+        super().__init__(domain)
+        self.log_dir = os.path.join(self.cache_dir, 'crtsh_req_logs')
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    async def scrape(self):
+        """Main scraping method for crt.sh"""
+        crtsh_output = []
+        # Fetch JSON data from crt.sh
+        response_json = await self._fetch_crtsh_data()
+        # Write the JSON response to a file
+        await self._write_json_response(response_json)
+        # Extract and filter domains from the response
+        crtsh_output_filtered = self._extract_and_filter_domains(response_json)
+        # Write the filtered domains to a file
+        await self._write_domains_to_file(crtsh_output_filtered)
+        return list(crtsh_output_filtered)
+
+    async def _fetch_crtsh_data(self):
+        """Fetch JSON data from crt.sh"""
+        url = f'https://crt.sh/?q={self.domain}&output=json'
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                return await resp.json()
+
+    async def _write_json_response(self, response_json):
+        """Write the raw JSON response to a file"""
+        file_path = os.path.join(
+            self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.json'
+        )
+        async with aiofiles.open(file_path, 'w') as json_file:
+            await json_file.write(json.dumps(response_json, sort_keys=True, indent=4))
+
+    def _extract_and_filter_domains(self, response_json):
+        """Extract and filter domains from the JSON response"""
+        crtsh_output = [
+            record['name_value'].split('\n') for record in response_json
+        ]
+        # Flatten list and filter out wildcard domains
+        crtsh_output_flatten = set(chain.from_iterable(crtsh_output))
+        crtsh_output_filtered = {domain for domain in crtsh_output_flatten if not domain.startswith('*.')}
+        return crtsh_output_filtered
+
+    async def _write_domains_to_file(self, crtsh_output_filtered):
+        """Write the filtered domains to a file"""
+        file_path = os.path.join(
+            self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt'
+        )
+        async with aiofiles.open(file_path, 'w') as domains_file:
+            await domains_file.write("\n".join(sorted(crtsh_output_filtered)))
+
+
+class DnsDumpsterScraper(BaseScraper):
+    """Scraper for DnsDumpster.com"""
+
+    DNSDUMPSTER_URL = 'https://dnsdumpster.com'
+
+    def __init__(self, domain: str):
+        super().__init__(domain)
+        self.log_dir = os.path.join(self.cache_dir, 'dnsdumpster_req_logs')
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    async def scrape(self):
+        csrf_token = await self._get_csrf_token()
+        # POST request to dnsdumpster.com with CSRF token and domain
+        response_text = await self._post_domain_data(csrf_token)
+        # Write the full HTML response to a file
+        await self._write_html_response(response_text)
+        # Parse HTML response and extract domains
+        dnsdumpster_output = self._extract_domains(response_text)
+        # Write extracted domains to a file
+        await self._write_domains_to_file(dnsdumpster_output)
+        return dnsdumpster_output
+
+    async def _get_csrf_token(self):
+        """Get CSRF token from dnsdumpster.com."""
+        async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as session:
+            async with session.get(self.DNSDUMPSTER_URL) as response:
+                cookies = session.cookie_jar.filter_cookies(self.DNSDUMPSTER_URL)
+                csrf_token = str(cookies.get('csrftoken')).split('Set-Cookie: csrftoken=')[1]
+        return csrf_token
+
+    async def _post_domain_data(self, csrf_token: str):
+        """Send POST request to dnsdumpster.com with domain data."""
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                    self.DNSDUMPSTER_URL,
+                    data={
+                        'csrfmiddlewaretoken': csrf_token,
+                        'targetip': self.domain,
+                        'user': 'free'
+                    },
+                    headers={
+                        'Host': 'dnsdumpster.com',
+                        'Pragma': 'no-cache',
+                        'Cache-Control': 'no-cache',
+                        'Upgrade-Insecure-Requests': '1',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
+                        'Origin': self.DNSDUMPSTER_URL,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                        'Referer': self.DNSDUMPSTER_URL,
+                        'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
+                        'Cookie': f'csrftoken={csrf_token}'
+                    }
+            ) as resp:
+                return await resp.text()
+
+    def _extract_domains(self, response_text: str):
+        """Extract domain names from the HTML response using BeautifulSoup."""
+        soup = BeautifulSoup(response_text, 'html.parser')
         rb = soup.find_all('td', {'class': 'col-md-4'})
-        # Find all domains in HTML-Response
-        for found_domain in rb:
-            dnsdumpster_output.append(
-                found_domain.text.replace('\n', '').split('HTTP')[0].replace('. ', '').lstrip('1234567890 ').rstrip(
-                    '.'))
+        domains = [
+            found_domain.text.replace('\n', '').split('HTTP')[0].replace('. ', '').lstrip('1234567890 ').rstrip('.')
+            for found_domain in rb
+        ]
+        return domains
+
+    async def _write_html_response(self, response_text: str):
+        """Write HTML response to a file asynchronously."""
+        file_path = os.path.join(self.log_dir,
+                                 f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt')
+        async with aiofiles.open(file_path, 'w') as post_request_file:
+            await post_request_file.write(response_text)
+
+    async def _write_domains_to_file(self, dnsdumpster_output):
+        """Write only the extracted domains to a file asynchronously."""
+        file_path = os.path.join(self.log_dir,
+                                 f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt')
+        async with aiofiles.open(file_path, 'w') as domains_only_file:
+            await domains_only_file.write("\n".join(sorted(dnsdumpster_output)))
+
+
+class CertSpotterScraper(BaseScraper):
+    """Scraper for CertSpotter API."""
+
+    def __init__(self, domain: str):
+        super().__init__(domain)
+        self.log_dir = os.path.join(self.cache_dir, 'certspotter_req_logs')
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    async def scrape(self):
+        """Main scraping method."""
+        certspotter_output = set()
+        async with aiohttp.ClientSession() as session:
+            response_json = await self._fetch_certspotter_data(session)
+        # Run file writing and domain extraction concurrently
+        certspotter_output, _ = await asyncio.gather(
+            self._extract_domains(response_json),
+            self._write_json_response(response_json)
+        )
         # Write only domains to file
-        with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                f'../../cache/dnsdumpster_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt')),
-                  'a') as domains_only_file:
-            domains_only_file.write(
-                "\n".join(str(dnsdumpster_out_domain) for dnsdumpster_out_domain in dnsdumpster_output))
-    return dnsdumpster_output
+        await self._write_domains_to_file(certspotter_output)
+        return list(certspotter_output)
+
+    async def _fetch_certspotter_data(self, session):
+        """Send GET request to CertSpotter API and retrieve JSON response."""
+        async with session.get(
+                f'https://api.certspotter.com/v1/issuances?domain={self.domain}&expand=dns_names',
+                headers={'Accept': 'application/json'}
+        ) as resp:
+            return await resp.json(encoding='utf-8')
+
+    async def _write_json_response(self, response_json):
+        """Write JSON response to a file asynchronously."""
+        file_path = os.path.join(
+            self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.json'
+        )
+        async with aiofiles.open(file_path, 'w') as json_request_file:
+            await json.dump(response_json, json_request_file, sort_keys=True, indent=4)
+
+    async def _write_domains_to_file(self, certspotter_output):
+        """Write extracted domains (no wildcards) to a file asynchronously."""
+        file_path = os.path.join(
+            self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt'
+        )
+        async with aiofiles.open(file_path, 'w') as domains_only_file:
+            await domains_only_file.write("\n".join(sorted(certspotter_output)))
+
+    async def _extract_domains(self, response_json):
+        """Extract domain names from JSON response and clean up wildcard entries."""
+        certspotter_output = set()
+        for cert_data in response_json:
+            for dns_name in cert_data['dns_names']:
+                certspotter_output.add(dns_name.lstrip('*.'))
+        return certspotter_output
 
 
-async def certspotter_scraping(domain: str):
-    certspotter_output = set()
-    # Verify that 'certspotter_req_logs' directory exists
-    if not os.path.isdir(os.path.normpath(
-            os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/certspotter_req_logs/')))):
-        os.makedirs(
-            os.path.normpath(
-                os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/certspotter_req_logs/'))))
-    async with aiohttp.ClientSession() as session:
-        # Get-Request for each domain with JSON-Response
-        async with session.get(f'https://api.certspotter.com/v1/issuances?domain={domain}&expand=dns_names',
-                               headers={'Accept': 'application/json'}
-                               ) as resp:
-            response_text = await resp.json(encoding='utf-8')
-            # Write JSON-Response to file
-            with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                    f'../../cache/certspotter_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.json')),
-                      'a') as json_request_file:
-                json.dump(response_text, json_request_file, sort_keys=True, indent=4)
-            # Get all domains from JSON-Response
-            for dict_in_resp in response_text:
-                for list_in_dict_resp in dict_in_resp['dns_names']:
-                    certspotter_output.add(list_in_dict_resp.lstrip('*.'))
-            # Write only domains to file and remove wildcards
-            with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                    f'../../cache/certspotter_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt')),
-                      'a') as domains_only_file:
-                domains_only_file.write(
-                    "\n".join(str(certspotter_out_domain) for certspotter_out_domain in certspotter_output))
-    return list(certspotter_output)
+class HackerTargetScraper(BaseScraper):
+    """Scraper for HackerTarget API."""
+
+    def __init__(self, domain: str):
+        super().__init__(domain)
+        self.log_dir = os.path.join(self.cache_dir, 'hackertarget_req_logs')
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    async def scrape(self):
+        """Main scraping method."""
+        hackertarget_output = set()
+        async with aiohttp.ClientSession() as session:
+            response_text = await self._fetch_hackertarget_data(session)
+        if 'API count exceeded' in response_text:
+            print('SKIP HackerTarget | Daily Limit Exceeded. (Possible bypass: new IP or use hackertarget.com API Key)')
+            return list(hackertarget_output)
+        # Run file writing and domain extraction concurrently
+        hackertarget_output, _ = await asyncio.gather(
+            self._extract_domains(response_text),
+            self._write_text_response(response_text)
+        )
+        # Write extracted domains to file
+        await self._write_domains_to_file(hackertarget_output)
+        return list(hackertarget_output)
+
+    async def _fetch_hackertarget_data(self, session):
+        """Send GET request to HackerTarget API and retrieve text response."""
+        async with session.get(f'https://api.hackertarget.com/hostsearch/?q={self.domain}') as resp:
+            return await resp.text(encoding='utf-8')
+
+    async def _write_text_response(self, response_text):
+        """Write text response to a file asynchronously."""
+        file_path = os.path.join(
+            self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_TEXT.txt'
+        )
+        async with aiofiles.open(file_path, 'w') as text_request_file:
+            await text_request_file.write(response_text)
+
+    async def _write_domains_to_file(self, hackertarget_output):
+        """Write extracted domains to a file asynchronously."""
+        file_path = os.path.join(
+            self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt'
+        )
+        async with aiofiles.open(file_path, 'w') as domains_only_file:
+            await domains_only_file.write("\n".join(sorted(hackertarget_output)))
+
+    async def _extract_domains(self, response_text):
+        """Extract domain names from the text response."""
+        hackertarget_output = set()
+        for line in response_text.splitlines():
+            if "," in line:
+                domain = line.split(",")[0]
+                hackertarget_output.add(domain)
+        return hackertarget_output
 
 
-async def hackertarget_scraping(domain: str):
-    hackertarget_output = set()
-    # Verify that 'hackertarget_req_logs' directory exists
-    if not os.path.isdir(os.path.normpath(
-            os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/hackertarget_req_logs/')))):
-        os.makedirs(
-            os.path.normpath(
-                os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/hackertarget_req_logs/'))))
-    async with aiohttp.ClientSession() as session:
-        # Get-Request for each domain with TEXT-Response
-        async with session.get(f'https://api.hackertarget.com/hostsearch/?q={domain}',
-                               ) as resp:
-            response_text = await resp.text(encoding='utf-8')
-            if not response_text.find('API count exceeded'):
-                print(
-                    'SKIP HackerTarget | Daily Limit Exceeded. (Possible bypass: new IP or use hackertarget.com API Key)')
-            else:
-                # Write TEXT-Response to file
-                with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                        f'../../cache/hackertarget_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_TEXT.txt')),
-                          'a') as text_request_file:
-                    text_request_file.write(str(response_text))
-                # Get all domains from TEXT-Response
-                for line in response_text.split():
-                    hackertarget_output.add(line.split(sep=",")[0])
-                # Write only domains to file
-                with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                        f'../../cache/hackertarget_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt')),
-                          'a') as domains_only_file:
-                    domains_only_file.write(
-                        "\n".join(str(hackertarget_out_domain) for hackertarget_out_domain in hackertarget_output))
-    return list(hackertarget_output)
+class SubdomainGatherer:
+    """Class to gather subdomains using multiple scrapers."""
 
+    def __init__(self, domains: set):
+        self.domains = domains
+        self.all_subdomains = set()
 
-async def crtsh_scraping(domain: str):
-    crtsh_output = list()
-    # Verify that 'crtsh_req_logs' directory exists
-    if not os.path.isdir(
-            os.path.normpath(os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/crtsh_req_logs/')))):
-        os.makedirs(
-            os.path.normpath(os.path.dirname(os.path.join(os.path.realpath(__file__), '../../cache/crtsh_req_logs/'))))
-    async with aiohttp.ClientSession() as session:
-        # Get-Request for each domain with JSON-Response
-        async with session.get(f'https://crt.sh/?q={domain}&output=json',
-                               headers={'Accept': 'application/json'}
-                               ) as resp:
-            response_text = await resp.json(encoding='utf-8')
-            # Write JSON-Response to file
-            with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                    f'../../cache/crtsh_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.json')
-                                       ),
-                      'a') as json_request_file:
-                json.dump(response_text, json_request_file, sort_keys=True, indent=4)
-            # Get all domains from JSON-Response
-            for list_in_resp in response_text:
-                crtsh_output.append(list_in_resp['name_value'].split('\n'))
-            # Flatten list(dict(),list(),str,...) to set() for only unique values
-            crtsh_output_flatten = set(chain.from_iterable(crtsh_output))
-            # Filter out wildcard domains
-            crtsh_output_flatten = {filter_domain for filter_domain in crtsh_output_flatten if
-                                    str(filter_domain).find('*.')}
-            # Write only domains to file
-            with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                    f'../../cache/crtsh_req_logs/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_domains.txt')),
-                      'a') as domains_only_file:
-                domains_only_file.write(
-                    "\n".join(str(crtsh_out_domain) for crtsh_out_domain in crtsh_output_flatten))
-    return list(crtsh_output_flatten)
+    async def gather_subdomains(self):
+        for domain in self.domains:
+            domain_subdomains = set()
+            domain_subdomains.update(await self.scrape_domain(domain))
+            await self._write_domain_subdomains_to_file(domain, domain_subdomains)
 
+            # Add domain and top-level domain (TLD)
+            domain_subdomains.add(domain)
+            domain_subdomains.update(await WAFUtils.get_top_domains([domain]))
 
-async def subdomain_gathering(domains: set):
-    all_domains_and_subdomains = set()
-    for domain in domains:
-        all_subdomains_set = set()
-        # Find all possible subdomain/domain for each domain
-        all_subdomains_set.update(await dnsdumpster_scraping(domain))
-        all_subdomains_set.update(await certspotter_scraping(domain))
-        all_subdomains_set.update(await hackertarget_scraping(domain))
-        all_subdomains_set.update(await crtsh_scraping(domain))
-        # Add own domain
-        all_subdomains_set.add(domain)
-        # Add TLD
-        all_subdomains_set.update(await get_top_domains([domain]))
-        if len(all_subdomains_set) == 0:
-            continue
-        else:
-            # Write to file all possible subdomains for domain
-            with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                    f'../../cache/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_subdomains.txt')),
-                      'a') as all_subdomains:
-                all_subdomains.write(
-                    "\n".join(str(subdomain_in_all) for subdomain_in_all in sorted(all_subdomains_set)))
-            # Add all subdomains to 'all_domains_and_subdomains'
-            all_domains_and_subdomains.update(all_subdomains_set)
-        # Clear set() for next domain gathering
-        all_subdomains_set.clear()
-    # Write to file combination of ALL domains/subdomains for every given domain as input
-    with open(os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                            f'../../cache/ALL_DOMAINS_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.txt')),
-              'a') as all_domains:
-        all_domains.write(
-            "\n".join(str(domain_in_all) for domain_in_all in sorted(all_domains_and_subdomains)))
-    return sorted(all_domains_and_subdomains)
+            # Add subdomains to overall set
+            self.all_subdomains.update(domain_subdomains)
+
+        # Write all domains/subdomains to a final file
+        await self._write_all_subdomains_to_file()
+        return sorted(self.all_subdomains)
+
+    async def scrape_domain(self, domain: str):
+        """Method to scrape multiple sources for a given domain."""
+        subdomains = set()
+        scrapers = [
+            # Add other scrapers here (DnsDumpsterScraper, CertSpotterScraper, etc.)
+            CrtShScraper(domain),
+            DnsDumpsterScraper(domain),
+            CertSpotterScraper(domain),
+            HackerTargetScraper(domain),
+        ]
+        for scraper in scrapers:
+            subdomains.update(await scraper.scrape())
+        return subdomains
+
+    async def _write_domain_subdomains_to_file(self, domain: str, subdomains: set):
+        file_path = os.path.normpath(os.path.join(os.path.realpath(__file__),
+                                                  f'../../cache/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_subdomains.txt'))
+        async with aiofiles.open(file_path, 'a') as file:
+            await file.write("\n".join(sorted(subdomains)))
+
+    async def _write_all_subdomains_to_file(self):
+        file_path = os.path.normpath(os.path.join(os.path.realpath(__file__),
+                                                  f'../../cache/ALL_DOMAINS_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.txt'))
+        async with aiofiles.open(file_path, 'a') as file:
+            await file.write("\n".join(sorted(self.all_subdomains)))
