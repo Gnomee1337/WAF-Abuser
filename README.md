@@ -54,6 +54,9 @@ data/cdn-ns.json                 - WAFs
 modules/subdomain_gathering.py   - Find (sub)domains
 modules/ip_gathering.py          - Find IPs in history
 modules/utility.py               - Auxiliary functions
+modules/scrapers/                - Scraper entities
+
+tests/                           - Pytest tests
 
 cache/                           - Directory for cached intermediate results (.json, .txt, .html)
 ```
