@@ -2,6 +2,8 @@ import asyncio
 import datetime
 import json
 import os
+import re
+
 import aiofiles
 import aiohttp
 from itertools import chain
@@ -61,12 +63,32 @@ class CrtShScraper(JsonScraper):
         await self._write_domains_to_file(crtsh_output_filtered)
         return list(crtsh_output_filtered)
 
-    async def _fetch_crtsh_data(self):
+    async def _fetch_crtsh_data(self, retries=3, delay=5):
         """Fetch JSON data from crt.sh"""
         url = f'https://crt.sh/?q={self.domain}&output=json'
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                return await resp.json()
+        for attempt in range(retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=30) as resp:
+                        if resp.status != 200:
+                            print(f"Error: crt.sh Received status code {resp.status} on attempt {attempt + 1}")
+                            continue
+                        # Check if the response is in JSON format
+                        content_type = resp.headers.get('Content-Type', '').lower()
+                        if 'application/json' in content_type:
+                            return await resp.json()
+                        else:
+                            # If not JSON, treat it as text (likely an HTML error page)
+                            text_response = await resp.text()
+                            print(f"crt.sh Unexpected content type: {content_type}")
+                            # Print part of the response for debugging
+                            print("crt.sh Response content: {text_response[:500]}")
+                            return None
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                print(f"crt.sh request error on attempt {attempt + 1}: {e}")
+                await asyncio.sleep(delay)
+        print("All crt.sh attempts failed.")
+        return None
 
     async def _write_json_response(self, response_json):
         """Write the raw JSON response to a file"""
@@ -78,6 +100,10 @@ class CrtShScraper(JsonScraper):
 
     def _extract_and_filter_domains(self, response_json):
         """Extract and filter domains from the JSON response"""
+        # Check if response_json is None before attempting to process it
+        if response_json is None:
+            print("Error: No valid data returned from crt.sh")
+            return []
         crtsh_output = [
             record['name_value'].split('\n') for record in response_json
         ]
@@ -202,7 +228,8 @@ class CertSpotterScraper(BaseScraper):
         """Send GET request to CertSpotter API and retrieve JSON response."""
         async with session.get(
                 f'https://api.certspotter.com/v1/issuances?domain={self.domain}&expand=dns_names',
-                headers={'Accept': 'application/json'}
+                headers={'Accept': 'application/json'},
+                timeout=30
         ) as resp:
             return await resp.json(encoding='utf-8')
 
@@ -212,7 +239,10 @@ class CertSpotterScraper(BaseScraper):
             self.log_dir, f'{self.domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}.json'
         )
         async with aiofiles.open(file_path, 'w') as json_request_file:
-            await json.dump(response_json, json_request_file, sort_keys=True, indent=4)
+            # Create the JSON string synchronously
+            json_string = json.dumps(response_json, sort_keys=True, indent=4)
+            # Write the JSON content to the file asynchronously
+            await json_request_file.write(json_string)
 
     async def _write_domains_to_file(self, certspotter_output):
         """Write extracted domains (no wildcards) to a file asynchronously."""
@@ -258,7 +288,7 @@ class HackerTargetScraper(BaseScraper):
 
     async def _fetch_hackertarget_data(self, session):
         """Send GET request to HackerTarget API and retrieve text response."""
-        async with session.get(f'https://api.hackertarget.com/hostsearch/?q={self.domain}') as resp:
+        async with session.get(f'https://api.hackertarget.com/hostsearch/?q={self.domain}', timeout=30) as resp:
             return await resp.text(encoding='utf-8')
 
     async def _write_text_response(self, response_text):
@@ -316,9 +346,9 @@ class SubdomainGatherer:
         scrapers = [
             # Add other scrapers here (DnsDumpsterScraper, CertSpotterScraper, etc.)
             CrtShScraper(domain),
-            # DnsDumpsterScraper(domain),
-            # CertSpotterScraper(domain),
-            # HackerTargetScraper(domain),
+            DnsDumpsterScraper(domain),
+            CertSpotterScraper(domain),
+            HackerTargetScraper(domain),
         ]
         for scraper in scrapers:
             subdomains.update(await scraper.scrape())

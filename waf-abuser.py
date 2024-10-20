@@ -19,7 +19,7 @@ class WAFAbuser:
     def __init__(self, logger_level=logging.CRITICAL):
         self.logger = self.create_logger(logger_level)
         self.input_domains = set()
-        self.similarity_rate = 0
+        self.similarity_rate = 70
         self.domains_only_flag = False
         self.ip_gatherer = IPGatherer()
         self.waf_utils = WAFUtils()

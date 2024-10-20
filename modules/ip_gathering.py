@@ -68,20 +68,26 @@ class IPGatherer:
         return all_domain_ips
 
     async def _write_html_response(self, domain: str, response_text: str):
+        # Use this sanitized domain when generating filenames
+        sanitized_domain = self.sanitize_filename(domain)
         file_path = os.path.join(self.log_dir,
-                                 f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt')
+                                 f'{sanitized_domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_HTML.txt')
         async with aiofiles.open(file_path, 'w') as file:
             await file.write(response_text)
 
     async def _write_extracted_ips_to_file(self, domain: str, viewdnsinfo_ips_output: set):
+        # Use this sanitized domain when generating filenames
+        sanitized_domain = self.sanitize_filename(domain)
         file_path = os.path.join(self.log_dir,
-                                 f'{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_ips.txt')
+                                 f'{sanitized_domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_only_ips.txt')
         async with aiofiles.open(file_path, 'w') as file:
             await file.write("\n".join(str(ip) for ip in viewdnsinfo_ips_output))
 
     async def _write_domain_related_ips_to_file(self, domain: str, domain_ips: set):
+        # Use this sanitized domain when generating filenames
+        sanitized_domain = self.sanitize_filename(domain)
         file_path = os.path.normpath(os.path.join(os.path.realpath(__file__),
-                                                  f'../../cache/{domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'))
+                                                  f'../../cache/{sanitized_domain}_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'))
         async with aiofiles.open(file_path, 'w') as file:
             await file.write("\n".join(sorted(domain_ips)))
 
@@ -90,3 +96,12 @@ class IPGatherer:
                                                   f'../../cache/ALL_DOMAINS_{datetime.datetime.now().strftime("%d-%m-%Y_%Hh%Mm%Ss")}_IPs.txt'))
         async with aiofiles.open(file_path, 'w') as file:
             await file.write("\n".join(str(ip) for ip in sorted(self.all_ips)))
+
+    def sanitize_filename(self, domain: str) -> str:
+        # Remove non-alphanumeric characters (keep dots for domain separation)
+        sanitized_domain = re.sub(r'[^A-Za-z0-9.-]+', '', domain)
+        # Optionally limit the length of the domain name in the filename
+        max_length = 50
+        if len(sanitized_domain) > max_length:
+            sanitized_domain = sanitized_domain[:max_length]
+        return sanitized_domain
