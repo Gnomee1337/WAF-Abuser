@@ -8,7 +8,7 @@ class BaseScraper(ABC):
 
     def __init__(self, domain: str):
         self.domain = domain
-        self.cache_dir = os.path.normpath(os.path.join(os.path.realpath(__file__), '../../cache'))
+        self.cache_dir = os.path.normpath(os.path.join(os.path.realpath(__file__), '../../../cache'))
         os.makedirs(self.cache_dir, exist_ok=True)
 
     @abstractmethod
